@@ -44,15 +44,6 @@ Thumbs.db
 .eslintcache
 
 # =========================================
-# Sequelize
-# =========================================
-/migrations/
-!/migrations/.gitkeep
-/seeders/
-!/seeders/.gitkeep
-/config/config.json
-
-# =========================================
 # Swagger JSON/Generated Docs
 # =========================================
 swagger-output.json
