@@ -2,7 +2,7 @@
   "development": {
     "username": "root",
     "password": null,
-    "database": "addons_marketplace",
+    "database": "db_warmod",
     "host": "127.0.0.1",
     "dialect": "mysql"
   },

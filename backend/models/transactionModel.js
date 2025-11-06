@@ -1,7 +1,7 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
 import User from "./userModel.js";
-import Addon from "./addonModel.js";
+import Store from "./storeModel.js";
 
 const Transaction = sequelize.define(
   "Transaction",
@@ -11,41 +11,35 @@ const Transaction = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
+    reference_id: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+    },
+    invoice_id: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true,
+    },
     user_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: {
-        model: User,
-        key: "id",
-      },
     },
-    addon_id: {
+    store_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: {
-        model: Addon,
-        key: "id",
-      },
-    },
-    xendit_invoice_id: {
-      type: DataTypes.STRING,
-      allowNull: true,
     },
     amount: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.INTEGER,
       allowNull: false,
     },
     payment_method: {
-      type: DataTypes.STRING, // "QRIS", "EWALLET", "VA", dll.
-      allowNull: true,
+      type: DataTypes.STRING,
+      allowNull: false,
     },
     payment_status: {
-      type: DataTypes.ENUM("pending", "paid", "expired", "failed"),
-      defaultValue: "pending",
-    },
-    payment_date: {
-      type: DataTypes.DATE,
-      allowNull: true,
+      type: DataTypes.ENUM("PENDING", "PAID", "FAILED", "EXPIRED"),
+      defaultValue: "PENDING",
     },
   },
   {
@@ -54,10 +48,8 @@ const Transaction = sequelize.define(
   }
 );
 
-User.hasMany(Transaction, { foreignKey: "user_id", onDelete: "CASCADE" });
+// 🔗 Relasi
 Transaction.belongsTo(User, { foreignKey: "user_id" });
-
-Addon.hasMany(Transaction, { foreignKey: "addon_id", onDelete: "CASCADE" });
-Transaction.belongsTo(Addon, { foreignKey: "addon_id" });
+Transaction.belongsTo(Store, { foreignKey: "store_id" });
 
 export default Transaction;

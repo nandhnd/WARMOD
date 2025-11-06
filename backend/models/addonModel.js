@@ -10,6 +10,15 @@ const Addon = sequelize.define(
       autoIncrement: true,
       primaryKey: true,
     },
+    store_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: Store,
+        key: "id",
+      },
+      onDelete: "CASCADE",
+    },
     title: {
       type: DataTypes.STRING,
       allowNull: false,
@@ -30,6 +39,10 @@ const Addon = sequelize.define(
       type: DataTypes.STRING, // contoh: Euro Truck Simulator
       allowNull: false,
     },
+    images: {
+      type: DataTypes.JSON, // ["img1.jpg", "img2.jpg", "img3.jpg", "img4.jpg"]
+      allowNull: true,
+    },
     sold_count: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
@@ -41,6 +54,7 @@ const Addon = sequelize.define(
   },
   {
     tableName: "addons",
+    timestamps: true,
   }
 );
 
