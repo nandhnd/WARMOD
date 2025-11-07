@@ -3,18 +3,24 @@ import Store from "../models/storeModel.js";
 import SellerBalance from "../models/sellerBalanceModel.js";
 import { getStoreBalance } from "../utils/balanceUtils.js";
 
-// 🧾 Penjual mengajukan penarikan saldo
+// User: Penjual mengajukan penarikan saldo
 export const createWithdrawalRequest = async (req, res) => {
   try {
     const { amount, bank_name, account_number, account_holder } = req.body;
     const store = await Store.findOne({ where: { user_id: req.user.id } });
 
     if (!store)
-      return res.status(404).json({ message: "Toko tidak ditemukan" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Toko tidak ditemukan",
+      });
 
     const currentBalance = await getStoreBalance(store.id);
     if (amount > currentBalance)
-      return res.status(400).json({ message: "Saldo tidak mencukupi" });
+      return res.status(400).json({
+        status: "fail",
+        message: "Saldo tidak mencukupi",
+      });
 
     const withdrawal = await WithdrawalRequest.create({
       store_id: store.id,
@@ -25,31 +31,46 @@ export const createWithdrawalRequest = async (req, res) => {
       status: "pending",
     });
 
-    res.status(201).json({
-      message: "Permintaan penarikan saldo diajukan",
-      withdrawal,
+    return res.status(201).json({
+      status: "success",
+      message: "Berhasil membuat permintaan penarikan saldo",
+      data: {
+        withdrawal,
+      },
     });
   } catch (error) {
-    console.error("requestWithdrawal error:", error);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// 📋 Admin melihat semua pengajuan
+// Admin: melihat semua pengajuan
 export const getAllWithdrawals = async (req, res) => {
   try {
     const withdrawals = await WithdrawalRequest.findAll({
       include: [{ model: Store, as: "store" }],
       order: [["createdAt", "DESC"]],
     });
-    res.status(200).json({ withdrawals });
+    return res.status(200).json({
+      status: "success",
+      message: "Data penarikan saldo ditemukan",
+      data: {
+        withdrawals,
+      },
+    });
   } catch (error) {
-    console.error("getAllWithdrawals error:", error);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// ✅ Admin update status pengajuan (APPROVED / REJECTED / TRANSFERRED)
+// Admin: update status pengajuan (APPROVED / REJECTED / TRANSFERRED)
 export const updateWithdrawalStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -57,11 +78,17 @@ export const updateWithdrawalStatus = async (req, res) => {
 
     const withdrawal = await WithdrawalRequest.findByPk(id);
     if (!withdrawal)
-      return res.status(404).json({ message: "Pengajuan tidak ditemukan" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Pengajuan tidak ditemukan",
+      });
 
     // Cegah update ulang jika sudah transferred
     if (withdrawal.status === "TRANSFERRED")
-      return res.status(400).json({ message: "Transaksi sudah ditransfer" });
+      return res.status(400).json({
+        status: "fail",
+        message: "Transaksi sudah ditransfer",
+      });
 
     // === APPROVED ===
     if (status === "APPROVED") {
@@ -79,6 +106,7 @@ export const updateWithdrawalStatus = async (req, res) => {
     else if (status === "TRANSFERRED") {
       if (withdrawal.status !== "APPROVED")
         return res.status(400).json({
+          status: "fail",
           message: "Hanya pengajuan yang disetujui yang bisa ditransfer",
         });
 
@@ -86,7 +114,7 @@ export const updateWithdrawalStatus = async (req, res) => {
       await SellerBalance.create({
         store_id: withdrawal.store_id,
         type: "debit",
-        amount: -withdrawal.amount, // kurangi saldo
+        amount: withdrawal.amount, // kurangi saldo
         description: `Penarikan saldo #${withdrawal.id}`,
       });
 
@@ -96,17 +124,26 @@ export const updateWithdrawalStatus = async (req, res) => {
 
     // === Status tidak valid ===
     else {
-      return res.status(400).json({ message: "Status tidak valid" });
+      return res.status(400).json({
+        status: "fail",
+        message: "Status tidak valid",
+      });
     }
 
     await withdrawal.save();
 
-    res.json({
-      message: `Status pengajuan diperbarui menjadi ${withdrawal.status}`,
-      withdrawal,
+    return res.status(200).json({
+      status: "success",
+      message: "Status pengajuan diperbarui menjadi ${withdrawal.status}",
+      data: {
+        withdrawal,
+      },
     });
   } catch (error) {
-    console.error("updateWithdrawalStatus error:", error);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };

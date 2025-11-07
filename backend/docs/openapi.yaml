@@ -1,0 +1,134 @@
+openapi: 3.0.3
+info:
+  title: Auth API - Capstone Project
+  description: API untuk autentikasi pengguna (Register & Login)
+  version: 1.0.0
+  contact:
+    name: Nanda
+    email: nanda@example.com
+
+servers:
+  - url: https://mockapi.example.com/v1
+    description: Mock Server (Testing)
+  - url: http://localhost:3000/api
+    description: Local Development Server
+
+paths:
+  /auth/register:
+    post:
+      summary: Register akun baru
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            examples:
+              success:
+                $ref: "#/components/examples/RegisterSuccess"
+              fail:
+                $ref: "#/components/examples/RegisterFail"
+      responses:
+        "201":
+          description: Berhasil register
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Gagal register
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailResponse"
+
+  /auth/login:
+    post:
+      summary: Login user
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login berhasil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Password salah
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailResponse"
+
+components:
+  schemas:
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          example: user@mail.com
+        username:
+          type: string
+          example: nandha
+        password:
+          type: string
+          example: 12345678
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          example: user@mail.com
+        password:
+          type: string
+          example: 12345678
+
+    SuccessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        data:
+          type: object
+          example:
+            message: Register berhasil
+            token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    FailResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: fail
+        data:
+          type: object
+          example:
+            message: Email sudah digunakan
+
+  examples:
+    RegisterSuccess:
+      summary: Contoh register berhasil
+      value:
+        status: success
+        data:
+          message: Register berhasil
+          token: <jwt_token>
+
+    RegisterFail:
+      summary: Contoh email sudah digunakan
+      value:
+        status: fail
+        data:
+          message: Email sudah digunakan

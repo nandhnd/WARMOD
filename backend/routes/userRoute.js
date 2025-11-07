@@ -1,24 +1,20 @@
 import express from "express";
+import { verifyToken, isAdmin } from "../middlewares/authMiddleware.js";
 import {
   getAllUsers,
   getUserById,
-  updateMyUsername,
-  deleteUser,
+  updateProfile,
 } from "../controllers/userController.js";
-import { verifyToken, isAdmin } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-/**
- * @swagger
- * tags:
- *   name: Admin - User Management
- *   description: Manajemen pengguna oleh admin
- */
+// Admin & User
+router.get("/:id", verifyToken, getUserById);
 
+// Admin
 router.get("/", verifyToken, isAdmin, getAllUsers);
-router.get("/:id", verifyToken, isAdmin, getUserById);
-router.put("/me/username", verifyToken, updateMyUsername);
-router.delete("/:id", verifyToken, isAdmin, deleteUser);
+
+// User
+router.put("/:id", verifyToken, updateProfile);
 
 export default router;

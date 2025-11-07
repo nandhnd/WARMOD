@@ -1,7 +1,9 @@
 import Cart from "../models/cartModel.js";
 import Addon from "../models/addonModel.js";
+import Transaction from "../models/transactionModel.js";
+import TransactionItem from "../models/transactionItemModel.js";
 
-// ✅ Tambah addon ke cart
+// User: Tambah addon ke cart
 export const addToCart = async (req, res) => {
   try {
     const userId = req.user.id; // dari JWT
@@ -10,15 +12,42 @@ export const addToCart = async (req, res) => {
     // Cek apakah addon ada
     const addon = await Addon.findByPk(addon_id);
     if (!addon) {
-      return res.status(404).json({ message: "Addon tidak ditemukan" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Addon tidak ditemukan",
+      });
+    }
+
+    // Cek apakah user sudah pernah membeli addon ini
+    const alreadyPurchased = await Transaction.findOne({
+      where: { user_id: userId, payment_status: ["PAID", "PENDING"] },
+      include: [
+        {
+          model: TransactionItem,
+          as: "items",
+          where: { addon_id },
+        },
+      ],
+    });
+
+    if (alreadyPurchased) {
+      return res.status(400).json({
+        status: "fail",
+        message:
+          "Anda sudah pernah membeli addon ini, tidak dapat membeli lagi",
+      });
     }
 
     // Cek apakah sudah ada di cart
     const existing = await Cart.findOne({
       where: { user_id: userId, addon_id },
     });
+
     if (existing) {
-      return res.status(400).json({ message: "Addon sudah ada di keranjang" });
+      return res.status(400).json({
+        status: "fail",
+        message: "Addon sudah ada di keranjang",
+      });
     }
 
     const cartItem = await Cart.create({
@@ -27,16 +56,23 @@ export const addToCart = async (req, res) => {
       subtotal: addon.price,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
+      status: "success",
       message: "Addon ditambahkan ke keranjang",
-      cart: cartItem,
+      data: {
+        cartItem,
+      },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// ✅ Lihat isi cart user
+// User: Lihat isi cart user
 export const getUserCart = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -51,13 +87,23 @@ export const getUserCart = async (req, res) => {
       ],
     });
 
-    res.status(200).json(items);
+    return res.status(200).json({
+      status: "success",
+      message: "Data cart ditemukan",
+      data: {
+        items,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// ✅ Hapus 1 item dari cart
+// User: Hapus 1 item dari cart
 export const deleteCartItem = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -68,26 +114,41 @@ export const deleteCartItem = async (req, res) => {
     });
 
     if (!item) {
-      return res
-        .status(404)
-        .json({ message: "Item tidak ditemukan di keranjang" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Item tidak ditemukan di keranjang",
+      });
     }
 
     await item.destroy();
-    res.status(200).json({ message: "Item dihapus dari keranjang" });
+    return res.status(204).json({
+      status: "success",
+      message: "Item dihapus dari keranjang",
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// ✅ Kosongkan seluruh cart
+// User: Kosongkan seluruh cart
 export const clearCart = async (req, res) => {
   try {
     const userId = req.user.id;
     await Cart.destroy({ where: { user_id: userId } });
 
-    res.status(200).json({ message: "Keranjang dikosongkan" });
+    return res.status(204).json({
+      status: "success",
+      message: "Keranjang dikosongkan",
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };

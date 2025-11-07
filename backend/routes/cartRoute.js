@@ -9,7 +9,7 @@ import { verifyToken } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-// Semua route di-protect JWT
+//User
 router.post("/", verifyToken, addToCart);
 router.get("/", verifyToken, getUserCart);
 router.delete("/:id", verifyToken, deleteCartItem);

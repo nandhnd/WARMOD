@@ -2,70 +2,85 @@ import SellerBalance from "../models/sellerBalanceModel.js";
 import Store from "../models/storeModel.js";
 import { getStoreBalance } from "../utils/balanceUtils.js";
 
-// 🔹 GET: Total Saldo Seller
+// GET: Total Saldo Seller
 export const getSellerBalance = async (req, res) => {
   try {
     const { store_id } = req.params;
+    const userId = req.user.id;
 
     const store = await Store.findByPk(store_id);
     if (!store)
-      return res.status(404).json({ message: "Toko tidak ditemukan" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Toko tidak ditemukan",
+      });
 
     const balance = await getStoreBalance(store_id);
 
-    res.json({
-      store_id,
-      balance,
+    if (store.user_id !== userId && req.user.role !== "admin") {
+      return res.status(403).json({
+        status: "fail",
+        message: "Anda tidak memiliki izin",
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "Data ditemukan",
+      data: {
+        store_id,
+        balance,
+      },
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Gagal mengambil saldo" });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// 🔹 GET: Riwayat transaksi saldo seller
+// GET: Riwayat transaksi saldo seller
 export const getSellerBalanceHistory = async (req, res) => {
   try {
     const { store_id } = req.params;
+    const userId = req.user.id;
 
+    // Cek apakah store ada
+    const store = await Store.findByPk(store_id);
+    if (!store) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Toko tidak ditemukan",
+      });
+    }
+
+    // Hanya admin atau pemilik toko yang boleh mengakses
+    if (req.user.role !== "admin" && store.user_id !== userId) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Anda tidak memiliki izin",
+      });
+    }
+
+    // Ambil data riwayat saldo
     const histories = await SellerBalance.findAll({
       where: { store_id },
       order: [["createdAt", "DESC"]],
     });
 
-    res.json(histories);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Gagal mengambil riwayat saldo" });
-  }
-};
-
-// 🔹 POST: Tarik saldo (Withdraw)
-export const withdrawSellerBalance = async (req, res) => {
-  try {
-    const { store_id } = req.params;
-    const { amount } = req.body;
-
-    const store = await Store.findByPk(store_id);
-    if (!store)
-      return res.status(404).json({ message: "Toko tidak ditemukan" });
-
-    const balance = await getStoreBalance(store_id);
-
-    if (amount > balance)
-      return res.status(400).json({ message: "Saldo tidak mencukupi" });
-
-    // Tambahkan transaksi debit
-    await SellerBalance.create({
-      store_id,
-      type: "debit",
-      amount,
-      description: "Penarikan saldo",
+    return res.status(200).json({
+      status: "success",
+      message: "Riwayat saldo berhasil diambil",
+      data: histories,
     });
-
-    res.status(201).json({ message: "Penarikan saldo berhasil" });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Gagal melakukan penarikan saldo" });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };

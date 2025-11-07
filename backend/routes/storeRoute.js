@@ -1,20 +1,28 @@
 import express from "express";
 import {
+  getStore,
   createStore,
   updateStoreStatus,
-  updateMyStore,
+  updateStore,
 } from "../controllers/storeController.js";
+import {
+  getSellerBalance,
+  getSellerBalanceHistory,
+} from "../controllers/sellerBalanceController.js";
 import { verifyToken, isAdmin } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-// user buat toko
-router.post("/", verifyToken, createStore);
+// Admin & User
+router.get("/:store_id", verifyToken, getStore);
+router.get("/:store_id/balance", verifyToken, getSellerBalance);
+router.get("/:store_id/balance/history", verifyToken, getSellerBalanceHistory);
 
-// user update toko sendiri
-router.put("/me", verifyToken, updateMyStore);
-
-// admin ubah status toko
+// Admin
 router.put("/:id/status", verifyToken, isAdmin, updateStoreStatus);
+
+// User
+router.post("/", verifyToken, createStore);
+router.put("/:store_id", verifyToken, updateStore);
 
 export default router;

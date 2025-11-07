@@ -2,7 +2,7 @@ import Addon from "../models/addonModel.js";
 import Store from "../models/storeModel.js";
 import User from "../models/userModel.js";
 
-// ✅ User: buat addon baru
+// User: buat addon baru
 export const createAddon = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -10,7 +10,10 @@ export const createAddon = async (req, res) => {
     // cari store user
     const store = await Store.findOne({ where: { user_id: userId } });
     if (!store)
-      return res.status(403).json({ message: "Kamu belum memiliki store" });
+      return res.status(403).json({
+        status: "fail",
+        data: { message: "User belum memiliki store" },
+      });
 
     const { title, description, price, link, game } = req.body;
 
@@ -24,15 +27,18 @@ export const createAddon = async (req, res) => {
     });
 
     res.status(201).json({
-      message: "Addon berhasil diunggah, menunggu verifikasi admin",
-      addon,
+      status: "success",
+      data: {
+        message: "Addon berhasil diunggah, menunggu verifikasi admin",
+        addon,
+      },
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// ✅ User: lihat semua addon miliknya
+// User: lihat semua addon miliknya
 export const getMyAddons = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -47,7 +53,7 @@ export const getMyAddons = async (req, res) => {
   }
 };
 
-// ✅ User: update addon miliknya
+// User: update addon miliknya
 export const updateMyAddon = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -77,7 +83,7 @@ export const updateMyAddon = async (req, res) => {
   }
 };
 
-// ✅ User: hapus addon miliknya
+// User: hapus addon miliknya
 export const deleteMyAddon = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -97,7 +103,7 @@ export const deleteMyAddon = async (req, res) => {
   }
 };
 
-// ✅ Admin: lihat semua addon
+// Admin: lihat semua addon
 export const getAllAddons = async (req, res) => {
   try {
     const addons = await Addon.findAll({
@@ -113,7 +119,7 @@ export const getAllAddons = async (req, res) => {
   }
 };
 
-// ✅ Admin: verifikasi addon
+// Admin: verifikasi addon
 export const verifyAddon = async (req, res) => {
   try {
     const { status } = req.body; // approved / rejected
@@ -133,7 +139,7 @@ export const verifyAddon = async (req, res) => {
   }
 };
 
-// ✅ Publik: lihat semua addon yang sudah disetujui
+// Publik: lihat semua addon yang sudah disetujui
 export const getApprovedAddons = async (req, res) => {
   try {
     const addons = await Addon.findAll({
@@ -143,5 +149,44 @@ export const getApprovedAddons = async (req, res) => {
     res.status(200).json(addons);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// Publik: lihat addon berdasarkan id
+export const getAddonById = async (req, res) => {
+  try {
+    const addon = await Addon.findByPk(req.params.id);
+
+    if (!addon) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Addon tidak ditemukan",
+      });
+    }
+
+    // Jika addon belum diverifikasi, hanya pemilik atau admin yang boleh lihat
+    if (addon.status !== "approved") {
+      if (
+        !req.user ||
+        (req.user.role !== "admin" && req.user.id !== addon.user_id)
+      ) {
+        return res.status(403).json({
+          status: "fail",
+          message: "Addon ini belum tersedia untuk publik",
+        });
+      }
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "Detail addon berhasil diambil",
+      data: addon,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };

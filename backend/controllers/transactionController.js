@@ -6,9 +6,7 @@ import Cart from "../models/cartModel.js"; // pastikan model cart sudah ada
 import Store from "../models/storeModel.js";
 import SellerBalance from "../models/sellerBalanceModel.js";
 
-// ====================================================
-// 🔹 CREATE TRANSACTION (Instant Checkout - langsung beli 1 addon)
-// ====================================================
+// User: create instant checkout
 export const instantCheckout = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -16,13 +14,33 @@ export const instantCheckout = async (req, res) => {
 
     const addon = await Addon.findByPk(addon_id);
     if (!addon)
-      return res.status(404).json({ message: "Addon tidak ditemukan" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Addon tidak ditemukan",
+      });
 
     const store = await Store.findByPk(addon.store_id);
     if (!store)
-      return res.status(404).json({ message: "Toko tidak ditemukan" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Toko tidak ditemukan",
+      });
 
-    // 🔹 Cek apakah user sudah pernah membeli addon ini
+    if (store.user_id == userId) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Tidak bisa membeli addon milik sendiri",
+      });
+    }
+
+    if (req.user.role == "admin") {
+      return res.status(403).json({
+        status: "fail",
+        message: "Admin tidak bisa membeli addon",
+      });
+    }
+
+    // Cek apakah user sudah pernah membeli addon ini
     const alreadyPurchased = await Transaction.findOne({
       where: { user_id: userId, payment_status: ["PAID", "PENDING"] },
       include: [
@@ -33,10 +51,12 @@ export const instantCheckout = async (req, res) => {
         },
       ],
     });
+
     if (alreadyPurchased) {
       return res.status(400).json({
+        status: "fail",
         message:
-          "Anda sudah pernah membeli addon ini, tidak dapat membeli lagi.",
+          "Anda sudah pernah membeli addon ini, tidak dapat membeli lagi",
       });
     }
 
@@ -59,7 +79,7 @@ export const instantCheckout = async (req, res) => {
       price: addon.price,
     });
 
-    // 🔹 Request ke Midtrans
+    // Request ke Midtrans
     const parameter = {
       payment_type: "qris",
       transaction_details: {
@@ -78,16 +98,13 @@ export const instantCheckout = async (req, res) => {
     transaction.invoice_id = midtransResponse.transaction_id;
     await transaction.save();
 
-    res.status(201).json({
+    return res.status(201).json({
+      status: "success",
       message: "Transaksi berhasil dibuat, silakan scan QR untuk membayar",
-      transaction,
-      qr_string:
-        midtransResponse.actions?.find((a) => a.name === "qr_string")?.url ||
-        null,
-      qr_url:
-        midtransResponse.actions?.find((a) => a.name === "deeplink-redirect")
-          ?.url || null,
-      midtrans_response: midtransResponse,
+      data: {
+        transaction,
+        midtrans_response: midtransResponse,
+      },
     });
   } catch (error) {
     console.error("instantCheckout error:", error.ApiResponse || error.message);
@@ -95,17 +112,25 @@ export const instantCheckout = async (req, res) => {
   }
 };
 
-// ====================================================
-// 🔹 CART CHECKOUT (Multi Store + Cegah Pembelian Ulang + Update Saldo Penjual)
-// ====================================================
+// User: create cart checkout
 export const cartCheckout = async (req, res) => {
   try {
     const userId = req.user.id;
 
+    if (req.user.role == "admin") {
+      return res.status(403).json({
+        status: "fail",
+        message: "Admin tidak bisa membeli addon",
+      });
+    }
+
     // Ambil isi keranjang user
     const cartItems = await Cart.findAll({ where: { user_id: userId } });
     if (cartItems.length === 0) {
-      return res.status(400).json({ message: "Keranjang kosong" });
+      return res.status(400).json({
+        status: "fail",
+        message: "Keranjang kosong",
+      });
     }
 
     // Ambil semua addon berdasarkan cart
@@ -114,9 +139,12 @@ export const cartCheckout = async (req, res) => {
     });
 
     if (!addons.length)
-      return res.status(404).json({ message: "Addon tidak ditemukan" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Addon tidak ditemukan",
+      });
 
-    // 🔹 Cek apakah user sudah pernah membeli addon yang sama (PENDING / PAID)
+    // Cek apakah user sudah pernah membeli addon yang sama (PENDING / PAID)
     const existingTransactions = await Transaction.findAll({
       where: {
         user_id: userId,
@@ -133,12 +161,13 @@ export const cartCheckout = async (req, res) => {
 
     if (newAddons.length === 0) {
       return res.status(400).json({
+        status: "fail",
         message:
           "Semua addon di keranjang sudah pernah dibeli atau masih menunggu pembayaran.",
       });
     }
 
-    // 🔹 Kelompokkan addons berdasarkan store_id agar bisa multi-store checkout
+    // Kelompokkan addons berdasarkan store_id agar bisa multi-store checkout
     const groupedByStore = newAddons.reduce((acc, addon) => {
       if (!acc[addon.store_id]) acc[addon.store_id] = [];
       acc[addon.store_id].push(addon);
@@ -147,7 +176,7 @@ export const cartCheckout = async (req, res) => {
 
     const createdTransactions = [];
 
-    // 🔹 Loop per store dan buat transaksi
+    // Loop per store dan buat transaksi
     for (const [storeId, storeAddons] of Object.entries(groupedByStore)) {
       const totalAmount = storeAddons.reduce((sum, a) => sum + a.price, 0);
       const referenceId = `trx-${Date.now()}-${storeId}`;
@@ -170,7 +199,7 @@ export const cartCheckout = async (req, res) => {
         });
       }
 
-      // 🔹 Request ke Midtrans
+      // Request ke Midtrans
       const parameter = {
         payment_type: "qris",
         transaction_details: {
@@ -190,18 +219,11 @@ export const cartCheckout = async (req, res) => {
       await transaction.save();
 
       createdTransactions.push({
-        store_id: storeId,
         transaction,
         midtrans_response: midtransResponse,
-        qr_string:
-          midtransResponse.actions?.find((a) => a.name === "qr_string")?.url ||
-          null,
-        qr_url:
-          midtransResponse.actions?.find((a) => a.name === "deeplink-redirect")
-            ?.url || null,
       });
 
-      // 🔹 Update saldo penjual (seller balance)
+      // Update saldo penjual (seller balance)
       const store = await Store.findByPk(storeId);
       if (store) {
         store.sellerBalance = (store.sellerBalance || 0) + totalAmount;
@@ -209,22 +231,27 @@ export const cartCheckout = async (req, res) => {
       }
     }
 
-    // 🔹 Hapus item dari cart
+    // Hapus item dari cart
     await Cart.destroy({ where: { user_id: userId } });
 
-    res.status(201).json({
+    return res.status(201).json({
+      status: "success",
       message: "Checkout berhasil, silakan scan QR untuk membayar",
-      transactions: createdTransactions,
+      data: {
+        createdTransactions,
+      },
     });
   } catch (error) {
     console.error("cartCheckout error:", error.ApiResponse || error.message);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// ====================================================
-// 🔹 WEBHOOK dari Midtrans
-// ====================================================
+// Webhook dari midtrans
 export const midtransWebhook = async (req, res) => {
   try {
     const notification = req.body;
@@ -234,7 +261,10 @@ export const midtransWebhook = async (req, res) => {
       where: { reference_id: order_id },
     });
     if (!transaction)
-      return res.status(404).json({ message: "Transaksi tidak ditemukan" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Transaksi tidak ditemukan",
+      });
 
     // Update status
     switch (transaction_status) {
@@ -289,9 +319,19 @@ export const midtransWebhook = async (req, res) => {
       }
     }
 
-    res.status(200).json({ message: "Status transaksi diperbarui" });
+    return res.status(200).json({
+      status: "success",
+      message: "Status transaksi diperbarui",
+      data: {
+        token,
+      },
+    });
   } catch (error) {
     console.error("midtransWebhook error:", error);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };

@@ -1,7 +1,7 @@
 import User from "../models/userModel.js";
 import Store from "../models/storeModel.js";
 
-// ✅ Lihat semua user
+// Admin: Lihat semua user
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.findAll({
@@ -10,48 +10,88 @@ export const getAllUsers = async (req, res) => {
         { model: Store, as: "store", attributes: ["id", "name", "status"] },
       ],
     });
-    res.status(200).json(users);
+    res.status(200).json({
+      status: "success",
+      message: "Data users ditemukan",
+      data: {
+        users,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// ✅ Lihat user by ID
+// Admin & User: Lihat user by ID
 export const getUserById = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id, {
-      attributes: ["id", "email", "username", "role", "has_store"],
+      attributes: ["id", "email", "username", "role", "has_store", "createdAt"],
       include: [
         { model: Store, as: "store", attributes: ["id", "name", "status"] },
       ],
     });
-    if (!user) return res.status(404).json({ message: "User tidak ditemukan" });
-    res.status(200).json(user);
+
+    if (!user)
+      return res.status(404).json({
+        status: "fail",
+        message: "User tidak ditemukan",
+      });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Data user ditemukan",
+      data: {
+        user,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// ✅ User ubah username miliknya sendiri
-export const updateMyUsername = async (req, res) => {
+// User : Update profile
+export const updateProfile = async (req, res) => {
   try {
-    const userId = req.user.id; // dari token JWT
+    const userId = parseInt(req.params.id);
     const { username } = req.body;
 
     if (!username) {
-      return res.status(400).json({ message: "Username tidak boleh kosong" });
+      return res.status(400).json({
+        status: "fail",
+        message: "Username tidak boleh kosong",
+      });
+    }
+
+    if (req.user.id !== userId) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Anda tidak memiliki izin untuk mengubah data ini",
+      });
     }
 
     const user = await User.findByPk(userId);
     if (!user) {
-      return res.status(404).json({ message: "User tidak ditemukan" });
+      return res.status(404).json({
+        status: "fail",
+        message: "User tidak ditemukan",
+      });
     }
 
     user.username = username;
     await user.save();
 
     res.status(200).json({
-      message: "Username berhasil diperbarui",
+      status: "success",
+      message: "Profil berhasil diperbarui",
       user: {
         id: user.id,
         email: user.email,
@@ -61,19 +101,10 @@ export const updateMyUsername = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ✅ (Opsional) Hapus user
-export const deleteUser = async (req, res) => {
-  try {
-    const user = await User.findByPk(req.params.id);
-    if (!user) return res.status(404).json({ message: "User tidak ditemukan" });
-
-    await user.destroy();
-    res.status(200).json({ message: "User berhasil dihapus" });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };

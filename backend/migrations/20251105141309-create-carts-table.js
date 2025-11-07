@@ -44,5 +44,5 @@ export async function up(queryInterface, Sequelize) {
 }
 
 export async function down(queryInterface) {
-  await queryInterface.dropTable("cart");
+  await queryInterface.dropTable("carts");
 }

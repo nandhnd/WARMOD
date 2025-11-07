@@ -1,6 +1,7 @@
 import Store from "../models/storeModel.js";
 import User from "../models/userModel.js";
 
+// User: Create store
 export const createStore = async (req, res) => {
   try {
     const userId = req.user.id; // ambil dari JWT middleware
@@ -9,7 +10,10 @@ export const createStore = async (req, res) => {
     // Cek apakah user sudah punya store
     const existingStore = await Store.findOne({ where: { user_id: userId } });
     if (existingStore) {
-      return res.status(400).json({ message: "User sudah memiliki store" });
+      return res.status(400).json({
+        status: "fail",
+        message: "User sudah memiliki store",
+      });
     }
 
     // Buat store baru
@@ -23,16 +27,23 @@ export const createStore = async (req, res) => {
     // Update flag user.has_store
     await User.update({ has_store: true }, { where: { id: userId } });
 
-    res.status(201).json({
+    return res.status(201).json({
+      status: "success",
       message: "Store berhasil dibuat",
-      store,
+      data: {
+        store,
+      },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// ✅ Admin: update status toko user
+// Admin: update status toko user
 export const updateStoreStatus = async (req, res) => {
   try {
     const storeId = req.params.id;
@@ -43,30 +54,50 @@ export const updateStoreStatus = async (req, res) => {
     });
 
     if (!store)
-      return res.status(404).json({ message: "Store tidak ditemukan" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Store tidak ditemukan",
+      });
 
     store.status = status;
     await store.save();
 
-    res.status(200).json({
+    return res.status(200).json({
+      status: "success",
       message: "Status toko berhasil diperbarui",
-      store,
+      data: {
+        store,
+      },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
-// ✅ User: update data store miliknya sendiri
-export const updateMyStore = async (req, res) => {
+// User: update data store miliknya sendiri
+export const updateStore = async (req, res) => {
   try {
-    const userId = req.user.id; // dari token JWT
+    const userId = req.user.id;
+    const storeId = parseInt(req.params.id);
     const { name, description } = req.body;
 
-    // Cari store berdasarkan userId
-    const store = await Store.findOne({ where: { user_id: userId } });
+    const store = await Store.findOne({ where: { id: storeId } });
     if (!store) {
-      return res.status(404).json({ message: "Kamu belum memiliki store" });
+      return res.status(404).json({
+        status: "fail",
+        message: "Store tidak ditemukan",
+      });
+    }
+
+    if (store.user_id !== userId) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Anda tidak memiliki izin untuk mengubah data ini",
+      });
     }
 
     // Update field yang dikirim
@@ -75,11 +106,50 @@ export const updateMyStore = async (req, res) => {
 
     await store.save();
 
-    res.status(200).json({
+    return res.status(200).json({
+      status: "success",
       message: "Store berhasil diperbarui",
-      store,
+      data: {
+        store,
+      },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
+  }
+};
+
+// Admin & User: get store
+export const getStore = async (req, res) => {
+  try {
+    const store = await Store.findByPk(req.params.id, {
+      include: [
+        { model: User, as: "user", attributes: ["id", "email", "username"] },
+      ],
+    });
+
+    if (!store) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Store tidak ditemukan",
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "Data store ditemukan",
+      data: {
+        store,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };

@@ -10,11 +10,24 @@ export const register = async (req, res) => {
   try {
     const { email, username, password } = req.body;
 
-    const existingUser = await User.findOne({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ message: "Email sudah digunakan" });
+    // Validasi input
+    if (!email || !username || !password) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Semua field wajib diisi",
+      });
     }
 
+    // Cek user sudah ada
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Email sudah digunakan",
+      });
+    }
+
+    // Hash password dan buat user baru
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({
       email,
@@ -28,9 +41,19 @@ export const register = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    res.status(201).json({ message: "Register berhasil", token });
+    return res.status(201).json({
+      status: "success",
+      message: "Register berhasil",
+      data: {
+        token,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
@@ -38,12 +61,32 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    // Validasi input
+    if (!email || !password) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Email dan password wajib diisi",
+      });
+    }
+
+    // Cek user
     const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "User tidak ditemukan",
+      });
+    }
 
-    if (!user) return res.status(404).json({ message: "User tidak ditemukan" });
-
+    // Cek password
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: "Password salah" });
+    if (!isMatch) {
+      return res.status(401).json({
+        status: "fail",
+        data: { message: "Password salah" },
+      });
+    }
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
@@ -51,9 +94,19 @@ export const login = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    res.json({ message: "Login berhasil", token });
+    return res.status(200).json({
+      status: "success",
+      message: "Login berhasil",
+      data: {
+        token,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };
 
@@ -63,8 +116,24 @@ export const getProfile = async (req, res) => {
     const user = await User.findByPk(req.user.id, {
       attributes: { exclude: ["password"] },
     });
-    res.json(user);
+
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        data: { message: "User tidak ditemukan" },
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "Data user ditemukan",
+      data: user,
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
   }
 };

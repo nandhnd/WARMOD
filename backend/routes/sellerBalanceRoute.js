@@ -14,7 +14,4 @@ router.get("/:store_id", verifyToken, getSellerBalance);
 // GET riwayat saldo toko
 router.get("/:store_id/history", verifyToken, getSellerBalanceHistory);
 
-// POST tarik saldo
-// router.post("/:store_id/withdraw", verifyToken, withdrawSellerBalance);
-
 export default router;
