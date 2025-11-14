@@ -1,134 +1,685 @@
 openapi: 3.0.3
 info:
-  title: Auth API - Capstone Project
-  description: API untuk autentikasi pengguna (Register & Login)
-  version: 1.0.0
-  contact:
-    name: Nanda
-    email: nanda@example.com
+  title: WARMOD API
+  version: 1.0.2
+  description: >
+    API untuk website jual beli addons game
 
 servers:
-  - url: https://mockapi.example.com/v1
-    description: Mock Server (Testing)
-  - url: http://localhost:3000/api
-    description: Local Development Server
+  - url: http://localhost:5000/api
+    description: Local development
+  - url: https://api.warmod.com/api
+    description: Production server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    BasicResponse:
+      type: object
+      properties:
+        status: { type: string, example: success }
+        message: { type: string, example: Operasi berhasil }
+        data: { type: object }
+
+    FailResponse:
+      type: object
+      properties:
+        status: { type: string, example: fail }
+        message: { type: string, example: Kesalahan dari pengguna }
+
+    ErrorResponse:
+      type: object
+      properties:
+        status: { type: string, example: error }
+        message: { type: string, example: Terjadi kesalahan pada server }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        email: { type: string, format: email }
+        username: { type: string }
+        role: { type: string, enum: [admin, user] }
+        has_store: { type: boolean }
+
+    Store:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, inactive] }
+
+    Addon:
+      type: object
+      properties:
+        id: { type: integer }
+        store_id: { type: integer }
+        title: { type: string }
+        description: { type: string }
+        price: { type: integer }
+        game: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+
+    CartItem:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        addon_id: { type: integer }
+        subtotal: { type: number, format: float }
+
+    Transaction:
+      type: object
+      properties:
+        id: { type: integer }
+        reference_id: { type: string }
+        user_id: { type: integer }
+        store_id: { type: integer }
+        amount: { type: integer }
+        payment_method: { type: string }
+        payment_status: { type: string, enum: [PENDING, PAID, FAILED, EXPIRED] }
+
+    Withdrawal:
+      type: object
+      properties:
+        id: { type: integer }
+        store_id: { type: integer }
+        amount: { type: number }
+        bank_name: { type: string }
+        account_number: { type: string }
+        account_holder: { type: string }
+        status:
+          { type: string, enum: [PENDING, APPROVED, REJECTED, TRANSFERRED] }
 
 paths:
+  # ========================
+  # AUTH
+  # ========================
   /auth/register:
+    x-priority: 1
     post:
-      summary: Register akun baru
-      tags:
-        - Auth
+      summary: Register user baru
+      tags: [Auth]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RegisterRequest"
-            examples:
-              success:
-                $ref: "#/components/examples/RegisterSuccess"
-              fail:
-                $ref: "#/components/examples/RegisterFail"
+              type: object
+              required: [email, username, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                username:
+                  type: string
+                  example: player123
+                password:
+                  type: string
+                  format: password
+                  example: secret123
       responses:
         "201":
-          description: Berhasil register
+          description: Register berhasil
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                $ref: "#/components/schemas/BasicResponse"
+              examples:
+                success:
+                  summary: Register sukses
+                  value:
+                    status: success
+                    message: "Register berhasil"
+                    data:
+                      id: 1
+                      email: user@example.com
+                      username: player123
+
         "400":
-          description: Gagal register
+          description: Email sudah digunakan
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/FailResponse"
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                duplicate:
+                  summary: Email sudah terdaftar
+                  value:
+                    status: fail
+                    message: "Email sudah digunakan"
+
+        "500":
+          description: Terjadi kesalahan pada server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                server:
+                  summary: Server error
+                  value:
+                    status: error
+                    message: "Terjadi kesalahan pada server"
 
   /auth/login:
+    x-priority: 2
     post:
       summary: Login user
-      tags:
-        - Auth
+      tags: [Auth]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LoginRequest"
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  example: secret123
       responses:
         "200":
           description: Login berhasil
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                $ref: "#/components/schemas/BasicResponse"
+              examples:
+                success:
+                  summary: Login sukses
+                  value:
+                    status: success
+                    message: "Login berhasil"
+                    data:
+                      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
         "401":
           description: Password salah
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/FailResponse"
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                wrong:
+                  summary: Password salah
+                  value:
+                    status: fail
+                    message: "Password salah"
 
-components:
-  schemas:
-    RegisterRequest:
-      type: object
-      properties:
-        email:
-          type: string
-          example: user@mail.com
-        username:
-          type: string
-          example: nandha
-        password:
-          type: string
-          example: 12345678
+        "400":
+          description: Email/password wajib diisi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                missing:
+                  summary: Input tidak lengkap
+                  value:
+                    status: fail
+                    message: "Email dan password wajib diisi"
 
-    LoginRequest:
-      type: object
-      properties:
-        email:
-          type: string
-          example: user@mail.com
-        password:
-          type: string
-          example: 12345678
+        "500":
+          description: Terjadi kesalahan server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                server:
+                  summary: Server error
+                  value:
+                    status: error
+                    message: "Terjadi kesalahan pada server"
 
-    SuccessResponse:
-      type: object
-      properties:
-        status:
-          type: string
-          example: success
-        data:
-          type: object
-          example:
-            message: Register berhasil
-            token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+  /auth/me:
+    x-priority: 3
+    get:
+      summary: Mendapatkan profil user saat ini
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Profil user berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+              examples:
+                success:
+                  summary: Profil user
+                  value:
+                    status: success
+                    message: "Profil user berhasil diambil"
+                    data:
+                      id: 1
+                      email: user@example.com
+                      username: player123
+                      role: user
+                      has_store: false
 
-    FailResponse:
-      type: object
-      properties:
-        status:
-          type: string
-          example: fail
-        data:
-          type: object
-          example:
-            message: Email sudah digunakan
+        "401":
+          description: Unauthorized / token invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                unauthorized:
+                  summary: Token invalid
+                  value:
+                    status: fail
+                    message: "Token tidak valid atau habis masa berlaku"
 
-  examples:
-    RegisterSuccess:
-      summary: Contoh register berhasil
-      value:
-        status: success
-        data:
-          message: Register berhasil
-          token: <jwt_token>
+        "500":
+          description: Terjadi kesalahan server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                server:
+                  summary: Server error
+                  value:
+                    status: error
+                    message: "Terjadi kesalahan pada server"
 
-    RegisterFail:
-      summary: Contoh email sudah digunakan
-      value:
-        status: fail
-        data:
-          message: Email sudah digunakan
+  # ========================
+  # USERS
+  # ========================
+  /users:
+    x-priority: 4
+    get:
+      summary: Mendapatkan semua user (admin)
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Daftar user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /users/{id}:
+    x-priority: 5
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Mendapatkan user berdasarkan ID
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Detail user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+    put:
+      summary: Update profil user
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+      responses:
+        "200":
+          description: Profil diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  # ========================
+  # STORES
+  # ========================
+  /stores:
+    x-priority: 6
+    post:
+      summary: Membuat toko baru (user)
+      tags: [Stores]
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Toko berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /stores/{store_id}:
+    x-priority: 7
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Mendapatkan detail toko
+      tags: [Stores]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Detail toko
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /stores/{store_id}/balance:
+    x-priority: 8
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Mendapatkan saldo toko
+      tags: [Stores]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Saldo toko
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /stores/{store_id}/balance/history:
+    x-priority: 9
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Mendapatkan riwayat saldo toko
+      tags: [Stores]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Riwayat saldo toko
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  # ========================
+  # ADDONS
+  # ========================
+  /addons/public:
+    x-priority: 10
+    get:
+      summary: Mendapatkan daftar addon publik
+      tags: [Addons]
+      responses:
+        "200":
+          description: Daftar addon publik
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /addons/{id}:
+    x-priority: 11
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Mendapatkan detail addon
+      tags: [Addons]
+      responses:
+        "200":
+          description: Detail addon
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /addons:
+    x-priority: 12
+    post:
+      summary: Membuat addon baru
+      tags: [Addons]
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Addon dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+    get:
+      summary: Mendapatkan semua addon (admin)
+      tags: [Addons]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Semua addon
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /addons/me:
+    x-priority: 13
+    get:
+      summary: Mendapatkan daftar addon milik user
+      tags: [Addons]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Addon milik user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /addons/me/{id}:
+    x-priority: 14
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    put:
+      summary: Update addon milik user
+      tags: [Addons]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Addon diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+    delete:
+      summary: Hapus addon milik user
+      tags: [Addons]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Addon dihapus
+
+  # ========================
+  # CART
+  # ========================
+  /cart:
+    x-priority: 15
+    get:
+      summary: Mendapatkan keranjang user
+      tags: [Cart]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Data keranjang
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+    post:
+      summary: Tambah item ke keranjang
+      tags: [Cart]
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Item ditambahkan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+    delete:
+      summary: Hapus semua item dari keranjang
+      tags: [Cart]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Semua item dihapus
+
+  /cart/{id}:
+    x-priority: 16
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    delete:
+      summary: Hapus item dari keranjang
+      tags: [Cart]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Item dihapus
+
+  # ========================
+  # TRANSACTIONS
+  # ========================
+  /transactions/checkout/instant:
+    x-priority: 17
+    post:
+      summary: Checkout instan
+      tags: [Transactions]
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Transaksi instan berhasil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /transactions/checkout/cart:
+    x-priority: 18
+    post:
+      summary: Checkout dari keranjang
+      tags: [Transactions]
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Transaksi checkout berhasil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /transactions/webhook/midtrans:
+    x-priority: 19
+    post:
+      summary: Webhook Midtrans
+      tags: [Transactions]
+      responses:
+        "200":
+          description: Callback diterima
+
+  # ========================
+  # WITHDRAWALS
+  # ========================
+  /withdrawals:
+    x-priority: 20
+    post:
+      summary: Ajukan penarikan saldo
+      tags: [Withdrawals]
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Permintaan penarikan dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+    get:
+      summary: Lihat semua permintaan penarikan (admin)
+      tags: [Withdrawals]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Daftar permintaan penarikan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"
+
+  /withdrawals/{id}:
+    x-priority: 21
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    put:
+      summary: Ubah status penarikan (admin)
+      tags: [Withdrawals]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Status diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResponse"

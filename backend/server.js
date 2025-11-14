@@ -3,7 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import sequelize from "./config/database.js";
 import { swaggerUi, swaggerSpec } from "./config/swagger.js";
-import syncDatabase from "./models/index.js";
+import "./models/index.js";
 
 import authRoute from "./routes/authRoute.js";
 import userRoute from "./routes/userRoute.js";
@@ -23,7 +23,7 @@ app.use(express.json());
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.get("/", (req, res) => {
-  res.send("🚀 Addons Marketplace API is running...");
+  res.send("Addons Marketplace API is running...");
 });
 app.use("/api/auth", authRoute);
 app.use("/api/users", userRoute);

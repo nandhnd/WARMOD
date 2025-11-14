@@ -2,9 +2,11 @@ import { midtrans } from "../config/midtrans.js";
 import Transaction from "../models/transactionModel.js";
 import TransactionItem from "../models/transactionItemModel.js";
 import Addon from "../models/addonModel.js";
-import Cart from "../models/cartModel.js"; // pastikan model cart sudah ada
+import Cart from "../models/cartModel.js";
 import Store from "../models/storeModel.js";
 import SellerBalance from "../models/sellerBalanceModel.js";
+import User from "../models/userModel.js";
+import { sendAddonEmail } from "../utils/emailUtils.js";
 
 // User: create instant checkout
 export const instantCheckout = async (req, res) => {
@@ -285,12 +287,32 @@ export const midtransWebhook = async (req, res) => {
 
     await transaction.save();
 
-    // 🔹 Jika berhasil dibayar → update sold_count addon
-    if (transaction_status === "settlement") {
-      const items = await TransactionItem.findAll({
-        where: { transaction_id: transaction.id },
-      });
+    const user = await User.findByPk(transaction.user_id);
 
+    const items = await TransactionItem.findAll({
+      where: { transaction_id: transaction.id },
+      include: [
+        {
+          model: Addon,
+        },
+      ],
+    });
+
+    if (transaction_status === "settlement") {
+      await sendAddonEmail({
+        to: user.email,
+        username: user.username,
+        transaction,
+        addons: items.map((i) => ({
+          name: i.Addon.title,
+          price: i.price,
+          link: i.Addon.link,
+        })),
+      });
+    }
+
+    // Jika berhasil dibayar → update sold_count addon
+    if (transaction_status === "settlement") {
       for (const item of items) {
         const addon = await Addon.findByPk(item.addon_id);
         if (addon) {
@@ -321,10 +343,7 @@ export const midtransWebhook = async (req, res) => {
 
     return res.status(200).json({
       status: "success",
-      message: "Status transaksi diperbarui",
-      data: {
-        token,
-      },
+      message: "Webhook diproses & status transaksi diperbarui",
     });
   } catch (error) {
     console.error("midtransWebhook error:", error);

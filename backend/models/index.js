@@ -1,17 +1,20 @@
-import sequelize from "../config/database.js";
-import "./userModel.js";
-import "./storeModel.js";
-import "./addonModel.js";
-import "./transactionModel.js";
-import "./reportModel.js";
+import Transaction from "./transactionModel.js";
+import TransactionItem from "./transactionItemModel.js";
+import Addon from "./addonModel.js";
 
-const syncDatabase = async () => {
-  try {
-    await sequelize.sync({ alter: true }); // gunakan { force: true } jika ingin reset total
-    console.log("✅ All models synchronized successfully!");
-  } catch (error) {
-    console.error("❌ Failed to sync models:", error);
-  }
-};
+// RELATIONS
+Transaction.hasMany(TransactionItem, {
+  foreignKey: "transaction_id",
+});
 
-export default syncDatabase;
+TransactionItem.belongsTo(Transaction, {
+  foreignKey: "transaction_id",
+});
+
+Addon.hasMany(TransactionItem, {
+  foreignKey: "addon_id",
+});
+
+TransactionItem.belongsTo(Addon, {
+  foreignKey: "addon_id",
+});

@@ -1,6 +1,7 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
 import Store from "./storeModel.js";
+import TransactionItem from "./transactionItemModel.js";
 
 const Addon = sequelize.define(
   "Addon",
@@ -59,6 +60,7 @@ const Addon = sequelize.define(
 );
 
 Store.hasMany(Addon, { foreignKey: "store_id", as: "addons" });
+z;
 Addon.belongsTo(Store, { foreignKey: "store_id", as: "store" });
 
 export default Addon;
