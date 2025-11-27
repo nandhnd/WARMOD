@@ -88,10 +88,13 @@ export const instantCheckout = async (req, res) => {
         order_id: referenceId,
         gross_amount: addon.price,
       },
-      qris: { acquirer: "gopay" },
       customer_details: {
         email: req.user.email,
         first_name: req.user.username,
+      },
+      custom_expiry: {
+        expiry_duration: 1,
+        unit: "hour",
       },
     };
 
@@ -102,7 +105,7 @@ export const instantCheckout = async (req, res) => {
 
     return res.status(201).json({
       status: "success",
-      message: "Transaksi berhasil dibuat, silakan scan QR untuk membayar",
+      message: "Transaksi berhasil dibuat, scan QR untuk membayar",
       data: {
         transaction,
         midtrans_response: midtransResponse,
@@ -208,10 +211,13 @@ export const cartCheckout = async (req, res) => {
           order_id: referenceId,
           gross_amount: totalAmount,
         },
-        qris: { acquirer: "gopay" },
         customer_details: {
           email: req.user.email,
           first_name: req.user.username,
+        },
+        custom_expiry: {
+          expiry_duration: 1,
+          unit: "hour",
         },
       };
 
@@ -238,7 +244,7 @@ export const cartCheckout = async (req, res) => {
 
     return res.status(201).json({
       status: "success",
-      message: "Checkout berhasil, silakan scan QR untuk membayar",
+      message: "Checkout berhasil, scan QR untuk membayar",
       data: {
         createdTransactions,
       },
