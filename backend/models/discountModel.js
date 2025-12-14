@@ -1,14 +1,15 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
 
-const SellerBalance = sequelize.define(
-  "SellerBalance",
+const Discount = sequelize.define(
+  "Discount",
   {
     id: {
       type: DataTypes.INTEGER,
-      primaryKey: true,
       autoIncrement: true,
+      primaryKey: true,
     },
+
     store_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -16,25 +17,33 @@ const SellerBalance = sequelize.define(
         model: "stores",
         key: "id",
       },
-      onDelete: "CASCADE",
     },
-    type: {
-      type: DataTypes.ENUM("credit", "debit"), // credit = masuk, debit = keluar
+
+    percentage: {
+      type: DataTypes.INTEGER,
       allowNull: false,
     },
-    amount: {
-      type: DataTypes.DECIMAL(12, 2),
+
+    start_at: {
+      type: DataTypes.DATE,
       allowNull: false,
     },
-    description: {
-      type: DataTypes.STRING,
-      allowNull: true,
+
+    end_at: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
+
+    status: {
+      type: DataTypes.ENUM("active", "inactive"),
+      defaultValue: "inactive",
     },
   },
   {
-    tableName: "seller_balances",
+    tableName: "discounts",
     timestamps: true,
+    underscored: true,
   }
 );
 
-export default SellerBalance;
+export default Discount;

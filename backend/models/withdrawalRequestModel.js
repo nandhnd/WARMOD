@@ -1,6 +1,5 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
-import Store from "./storeModel.js";
 
 const WithdrawalRequest = sequelize.define(
   "WithdrawalRequest",
@@ -14,7 +13,7 @@ const WithdrawalRequest = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: Store,
+        model: "store",
         key: "id",
       },
     },
@@ -48,8 +47,5 @@ const WithdrawalRequest = sequelize.define(
     timestamps: true,
   }
 );
-
-Store.hasMany(WithdrawalRequest, { foreignKey: "store_id", as: "withdrawals" });
-WithdrawalRequest.belongsTo(Store, { foreignKey: "store_id", as: "store" });
 
 export default WithdrawalRequest;

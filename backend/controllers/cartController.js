@@ -2,6 +2,8 @@ import Cart from "../models/cartModel.js";
 import Addon from "../models/addonModel.js";
 import Transaction from "../models/transactionModel.js";
 import TransactionItem from "../models/transactionItemModel.js";
+import Discount from "../models/discountModel.js";
+import DiscountItem from "../models/discountItemModel.js";
 
 // User: Tambah addon ke cart
 export const addToCart = async (req, res) => {
@@ -24,7 +26,6 @@ export const addToCart = async (req, res) => {
       include: [
         {
           model: TransactionItem,
-          as: "items",
           where: { addon_id },
         },
       ],
@@ -82,24 +83,60 @@ export const getUserCart = async (req, res) => {
       include: [
         {
           model: Addon,
-          attributes: ["id", "title", "price", "game"],
+          attributes: ["id", "title", "price", "game", "images"],
+          include: [
+            {
+              model: DiscountItem,
+              required: false,
+              include: [
+                {
+                  model: Discount,
+                  attributes: ["id", "percentage", "end_at"],
+                  where: {
+                    status: "active",
+                  },
+                },
+              ],
+            },
+          ],
         },
       ],
     });
 
+    const result = items.map((cartItem) => {
+      const addon = cartItem.Addon;
+
+      // Ambil diskon pertama kalau ada
+      const item = addon?.DiscountItems?.[0];
+      const discount = item?.Discount?.percentage || null;
+      const endDate = item?.Discount?.end_at || null;
+
+      const finalPrice =
+        discount !== null
+          ? addon.price - (addon.price * discount) / 100
+          : addon.price;
+
+      return {
+        cartId: cartItem.id,
+        addonId: addon.id,
+        title: addon.title,
+        category: addon.game,
+        image: addon.images,
+        price: finalPrice,
+        originalPrice: addon.price,
+        discount,
+        discountEndDate: endDate,
+        quantity: cartItem.quantity || 1,
+      };
+    });
+
     return res.status(200).json({
-      status: "success",
-      message: "Data cart ditemukan",
-      data: {
-        items,
-      },
+      message: "Berhasil mengambil cart",
+      data: result,
     });
-  } catch (error) {
-    return res.status(500).json({
-      status: "error",
-      message: "Terjadi kesalahan pada server",
-      code: error.message,
-    });
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ message: err.message });
   }
 };
 

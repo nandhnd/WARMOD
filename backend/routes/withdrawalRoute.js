@@ -3,6 +3,7 @@ import {
   createWithdrawalRequest,
   getAllWithdrawals,
   updateWithdrawalStatus,
+  getOngoingWithdrawal,
 } from "../controllers/withdrawalController.js";
 import { verifyToken, isAdmin } from "../middlewares/authMiddleware.js";
 
@@ -10,6 +11,7 @@ const router = express.Router();
 
 // User:
 router.post("/", verifyToken, createWithdrawalRequest);
+router.get("/ongoing", verifyToken, getOngoingWithdrawal);
 
 // Admin
 router.get("/", verifyToken, isAdmin, getAllWithdrawals);

@@ -1,6 +1,5 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
-import User from "./userModel.js";
 
 const Store = sequelize.define(
   "Store",
@@ -14,7 +13,7 @@ const Store = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: User,
+        model: "users",
         key: "id",
       },
     },
@@ -36,8 +35,5 @@ const Store = sequelize.define(
     timestamps: true,
   }
 );
-
-User.hasOne(Store, { foreignKey: "user_id", as: "store", onDelete: "CASCADE" });
-Store.belongsTo(User, { foreignKey: "user_id", as: "user" });
 
 export default Store;

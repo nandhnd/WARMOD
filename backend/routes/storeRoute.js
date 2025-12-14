@@ -1,9 +1,11 @@
 import express from "express";
 import {
   getStore,
+  getStoreById,
   createStore,
   updateStoreStatus,
   updateStore,
+  getStoreAddons,
 } from "../controllers/storeController.js";
 import {
   getSellerBalance,
@@ -14,7 +16,7 @@ import { verifyToken, isAdmin } from "../middlewares/authMiddleware.js";
 const router = express.Router();
 
 // Admin & User
-router.get("/:store_id", verifyToken, getStore);
+// router.get("/:store_id", verifyToken, getStoreById);
 router.get("/:store_id/balance", verifyToken, getSellerBalance);
 router.get("/:store_id/balance/history", verifyToken, getSellerBalanceHistory);
 
@@ -22,7 +24,9 @@ router.get("/:store_id/balance/history", verifyToken, getSellerBalanceHistory);
 router.put("/:id/status", verifyToken, isAdmin, updateStoreStatus);
 
 // User
+router.get("/", verifyToken, getStore);
+router.get("/addons", verifyToken, getStoreAddons);
 router.post("/", verifyToken, createStore);
-router.put("/:store_id", verifyToken, updateStore);
+router.put("/", verifyToken, updateStore);
 
 export default router;

@@ -2,16 +2,18 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import User from "../models/userModel.js";
+import Store from "../models/storeModel.js";
 
 dotenv.config();
 
 // Register
 export const register = async (req, res) => {
   try {
-    const { email, username, password } = req.body;
+    const { email, fullname, password } = req.body;
+    const username = fullname;
 
     // Validasi input
-    if (!email || !username || !password) {
+    if (!email || !fullname || !password) {
       return res.status(400).json({
         status: "fail",
         message: "Semua field wajib diisi",
@@ -35,17 +37,11 @@ export const register = async (req, res) => {
       password: hashedPassword,
     });
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
-
     return res.status(201).json({
       status: "success",
       message: "Register berhasil",
       data: {
-        token,
+        user,
       },
     });
   } catch (error) {
@@ -71,7 +67,17 @@ export const login = async (req, res) => {
     }
 
     // Cek user
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({
+      where: { email },
+      include: [
+        {
+          model: Store,
+          as: "store",
+          required: false,
+        },
+      ],
+    });
+
     if (!user) {
       return res.status(404).json({
         status: "fail",
@@ -98,6 +104,11 @@ export const login = async (req, res) => {
       status: "success",
       message: "Login berhasil",
       data: {
+        id: user.id,
+        fullname: user.username,
+        email: user.email,
+        tokoStatus: user.has_store,
+        store: user.store || null,
         token,
       },
     });
@@ -113,8 +124,15 @@ export const login = async (req, res) => {
 // Get current user (profile)
 export const getProfile = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id, {
-      attributes: { exclude: ["password"] },
+    const user = await User.findOne({
+      where: { id: req.user.id },
+      include: [
+        {
+          model: Store,
+          as: "store",
+          required: false,
+        },
+      ],
     });
 
     if (!user) {
@@ -127,7 +145,13 @@ export const getProfile = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "Data user ditemukan",
-      data: user,
+      data: {
+        id: user.id,
+        fullname: user.username,
+        email: user.email,
+        tokoStatus: user.has_store,
+        store: user.store || null,
+      },
     });
   } catch (error) {
     return res.status(500).json({

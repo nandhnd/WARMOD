@@ -1,7 +1,5 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
-import User from "./userModel.js";
-import Addon from "./addonModel.js";
 
 const Cart = sequelize.define(
   "Cart",
@@ -15,7 +13,7 @@ const Cart = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: User,
+        model: "users",
         key: "id",
       },
       onDelete: "CASCADE",
@@ -24,7 +22,7 @@ const Cart = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: Addon,
+        model: "addons",
         key: "id",
       },
       onDelete: "CASCADE",
@@ -39,12 +37,5 @@ const Cart = sequelize.define(
     timestamps: true,
   }
 );
-
-// 🔗 Relasi antar model
-User.hasMany(Cart, { foreignKey: "user_id" });
-Cart.belongsTo(User, { foreignKey: "user_id" });
-
-Addon.hasMany(Cart, { foreignKey: "addon_id" });
-Cart.belongsTo(Addon, { foreignKey: "addon_id" });
 
 export default Cart;

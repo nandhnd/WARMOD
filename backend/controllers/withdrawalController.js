@@ -2,6 +2,7 @@ import WithdrawalRequest from "../models/withdrawalRequestModel.js";
 import Store from "../models/storeModel.js";
 import SellerBalance from "../models/sellerBalanceModel.js";
 import { getStoreBalance } from "../utils/balanceUtils.js";
+import User from "../models/userModel.js";
 
 // User: Penjual mengajukan penarikan saldo
 export const createWithdrawalRequest = async (req, res) => {
@@ -13,6 +14,19 @@ export const createWithdrawalRequest = async (req, res) => {
       return res.status(404).json({
         status: "fail",
         message: "Toko tidak ditemukan",
+      });
+
+    const ongoingWithdrawal = await WithdrawalRequest.findOne({
+      where: {
+        store_id: store.user_id,
+        status: "PENDING",
+      },
+    });
+
+    if (ongoingWithdrawal)
+      return res.status(400).json({
+        status: "fail",
+        message: "Ada penarikan saldo yang berjalan",
       });
 
     const currentBalance = await getStoreBalance(store.id);
@@ -28,7 +42,6 @@ export const createWithdrawalRequest = async (req, res) => {
       bank_name,
       account_number,
       account_holder,
-      status: "pending",
     });
 
     return res.status(201).json({
@@ -50,15 +63,38 @@ export const createWithdrawalRequest = async (req, res) => {
 // Admin: melihat semua pengajuan
 export const getAllWithdrawals = async (req, res) => {
   try {
-    const withdrawals = await WithdrawalRequest.findAll({
-      include: [{ model: Store, as: "store" }],
+    const rawWithdrawals = await WithdrawalRequest.findAll({
+      include: [
+        {
+          model: Store,
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "email", "username"],
+            },
+          ],
+        },
+      ],
       order: [["createdAt", "DESC"]],
     });
+
+    const withdrawalsWithBalance = await Promise.all(
+      rawWithdrawals.map(async (withdrawal) => {
+        const storeId = withdrawal.Store.id;
+        const currentBalance = await getStoreBalance(storeId);
+        return {
+          ...withdrawal.get({ plain: true }),
+          currentBalance: currentBalance.toString() || 0,
+        };
+      })
+    );
+
     return res.status(200).json({
       status: "success",
       message: "Data penarikan saldo ditemukan",
       data: {
-        withdrawals,
+        withdrawals: withdrawalsWithBalance,
       },
     });
   } catch (error) {
@@ -104,12 +140,6 @@ export const updateWithdrawalStatus = async (req, res) => {
 
     // === TRANSFERRED ===
     else if (status === "TRANSFERRED") {
-      if (withdrawal.status !== "APPROVED")
-        return res.status(400).json({
-          status: "fail",
-          message: "Hanya pengajuan yang disetujui yang bisa ditransfer",
-        });
-
       // Kurangi saldo toko
       await SellerBalance.create({
         store_id: withdrawal.store_id,
@@ -137,6 +167,39 @@ export const updateWithdrawalStatus = async (req, res) => {
       message: "Status pengajuan diperbarui menjadi ${withdrawal.status}",
       data: {
         withdrawal,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server",
+      code: error.message,
+    });
+  }
+};
+
+export const getOngoingWithdrawal = async (req, res) => {
+  try {
+    const store = await Store.findOne({ where: { user_id: req.user.id } });
+
+    if (!store)
+      return res.status(404).json({
+        status: "fail",
+        message: "Toko tidak ditemukan",
+      });
+
+    const ongoingWithdrawal = await WithdrawalRequest.findOne({
+      where: {
+        store_id: store.user_id,
+        status: "PENDING",
+      },
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Penarikan saldo dalam pending ditemukan",
+      data: {
+        ongoingWithdrawal,
       },
     });
   } catch (error) {

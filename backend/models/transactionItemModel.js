@@ -14,7 +14,7 @@ const TransactionItem = sequelize.define(
     transaction_id: {
       type: DataTypes.INTEGER,
       references: {
-        model: Transaction,
+        model: "transaction",
         key: "id",
       },
       onDelete: "CASCADE",
@@ -22,7 +22,7 @@ const TransactionItem = sequelize.define(
     addon_id: {
       type: DataTypes.INTEGER,
       references: {
-        model: Addon,
+        model: "addon",
         key: "id",
       },
       onDelete: "CASCADE",
@@ -36,11 +36,5 @@ const TransactionItem = sequelize.define(
     tableName: "transaction_items",
   }
 );
-
-Transaction.hasMany(TransactionItem, {
-  foreignKey: "transaction_id",
-  as: "items",
-});
-TransactionItem.belongsTo(Addon, { foreignKey: "addon_id", as: "addon" });
 
 export default TransactionItem;

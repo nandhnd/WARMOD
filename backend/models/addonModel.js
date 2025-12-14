@@ -1,7 +1,5 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
-import Store from "./storeModel.js";
-import TransactionItem from "./transactionItemModel.js";
 
 const Addon = sequelize.define(
   "Addon",
@@ -15,7 +13,7 @@ const Addon = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: Store,
+        model: "Stores",
         key: "id",
       },
       onDelete: "CASCADE",
@@ -58,9 +56,5 @@ const Addon = sequelize.define(
     timestamps: true,
   }
 );
-
-Store.hasMany(Addon, { foreignKey: "store_id", as: "addons" });
-z;
-Addon.belongsTo(Store, { foreignKey: "store_id", as: "store" });
 
 export default Addon;

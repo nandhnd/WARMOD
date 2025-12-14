@@ -1,6 +1,10 @@
 import Addon from "../models/addonModel.js";
 import Store from "../models/storeModel.js";
 import User from "../models/userModel.js";
+import Discount from "../models/discountModel.js";
+import DiscountItem from "../models/discountItemModel.js";
+
+import { Op } from "sequelize";
 
 // User: buat addon baru
 export const createAddon = async (req, res) => {
@@ -17,12 +21,29 @@ export const createAddon = async (req, res) => {
 
     const { title, description, price, link, game } = req.body;
 
+    // Kumpulkan URL dari file yang di-upload
+    const imageUrls =
+      req.files?.map(
+        (file) =>
+          `${req.protocol}://${req.get("host")}/api/uploads/${file.filename}`
+      ) || [];
+
+    if (imageUrls.length === 0) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Minimal upload 1 gambar",
+      });
+    }
+
+    const uploadedFilenames = req.files.map((file) => file.filename);
+
     const addon = await Addon.create({
       title,
       description,
       price,
       link,
       game,
+      images: imageUrls,
       store_id: store.id,
     });
 
@@ -34,6 +55,7 @@ export const createAddon = async (req, res) => {
       },
     });
   } catch (error) {
+    cleanupFiles(uploadedFilenames);
     res.status(500).json({ message: error.message });
   }
 };
@@ -104,12 +126,14 @@ export const deleteMyAddon = async (req, res) => {
 };
 
 // Admin: lihat semua addon
-export const getAllAddons = async (req, res) => {
+export const getPendingAddons = async (req, res) => {
   try {
     const addons = await Addon.findAll({
+      where: {
+        status: "pending",
+      },
       include: {
         model: Store,
-        as: "store",
         include: { model: User, as: "user" },
       },
     });
@@ -144,18 +168,87 @@ export const getApprovedAddons = async (req, res) => {
   try {
     const addons = await Addon.findAll({
       where: { status: "approved" },
-      include: { model: Store, as: "store", attributes: ["id", "name"] },
+      include: [
+        {
+          model: Store,
+          attributes: ["id", "name"],
+        },
+        {
+          model: DiscountItem,
+          required: false,
+          include: [
+            {
+              model: Discount,
+              attributes: ["id", "percentage", "end_at"],
+              where: {
+                status: "active",
+              },
+            },
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
     });
-    res.status(200).json(addons);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+
+    const result = addons.map((addon) => {
+      const item = addon.DiscountItems?.[0]; // Ambil diskon pertama jika ada
+
+      let discount = null;
+      let finalPrice = addon.price;
+      let endDate = null;
+
+      if (item && item.Discount) {
+        discount = item.Discount.percentage;
+        endDate = item.Discount.end_at;
+
+        // Hitung final price
+        finalPrice = addon.price - (addon.price * discount) / 100;
+      }
+
+      return {
+        id: addon.id,
+        title: addon.title,
+        category: addon.game,
+        seller: addon.Store?.name || null,
+        price: finalPrice, // harga setelah diskon
+        originalPrice: addon.price, // harga asli
+        discount: discount, // persentase
+        discountEndDate: endDate,
+        image: addon.images,
+        downloads: addon.sold_count || 0,
+      };
+    });
+
+    return res.status(200).json({
+      message: "Berhasil mengambil addon yang disetujui",
+      data: result,
+    });
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ message: err.message });
   }
 };
 
 // Publik: lihat addon berdasarkan id
 export const getAddonById = async (req, res) => {
   try {
-    const addon = await Addon.findByPk(req.params.id);
+    const addon = await Addon.findByPk(req.params.id, {
+      include: [
+        {
+          model: Store,
+          attributes: ["id", "name"],
+        },
+        {
+          model: DiscountItem,
+          include: [
+            {
+              model: Discount,
+              attributes: ["id", "percentage", "end_at"],
+            },
+          ],
+        },
+      ],
+    });
 
     if (!addon) {
       return res.status(404).json({
@@ -164,12 +257,14 @@ export const getAddonById = async (req, res) => {
       });
     }
 
-    // Jika addon belum diverifikasi, hanya pemilik atau admin yang boleh lihat
+    const storeId = await Store.findOne({
+      where: { user_id: req.user?.id || null },
+      attributes: ["id"],
+    });
+
+    // Jika belum approved → hanya pemilik atau admin
     if (addon.status !== "approved") {
-      if (
-        !req.user ||
-        (req.user.role !== "admin" && req.user.id !== addon.user_id)
-      ) {
+      if (req.user.role !== "admin" && storeId.id !== addon.store_id) {
         return res.status(403).json({
           status: "fail",
           message: "Addon ini belum tersedia untuk publik",
@@ -177,10 +272,51 @@ export const getAddonById = async (req, res) => {
       }
     }
 
+    let link = null;
+    if (req.params.id == addon.id || req.user.role === "admin") {
+      link = addon.link;
+    }
+
+    // --- Mapping diskon ---
+    const item = addon.DiscountItems?.[0];
+    let discount = null;
+    let finalPrice = addon.price;
+    let discountEnd = null;
+
+    if (item && item.Discount) {
+      discount = item.Discount.percentage;
+      discountEnd = item.Discount.end_at;
+      finalPrice = addon.price - (addon.price * discount) / 100;
+    }
+
+    // --- Mapping output sesuai FE ---
+    const mapped = {
+      id: addon.id,
+      title: addon.title,
+      description: addon.description,
+      category: addon.game,
+      seller: addon.Store?.name || null,
+
+      price: finalPrice,
+      originalPrice: addon.price,
+      discount: discount,
+      discountEndDate: discountEnd,
+      link: link,
+      status: addon.status,
+
+      image: Array.isArray(addon.images) ? addon.images[0] : addon.images,
+      images: Array.isArray(addon.images) ? addon.images : [],
+
+      downloads: addon.sold_count || 0,
+
+      createdAt: addon.createdAt,
+      updatedAt: addon.updatedAt,
+    };
+
     return res.status(200).json({
       status: "success",
       message: "Detail addon berhasil diambil",
-      data: addon,
+      data: mapped,
     });
   } catch (error) {
     return res.status(500).json({
@@ -189,4 +325,23 @@ export const getAddonById = async (req, res) => {
       code: error.message,
     });
   }
+};
+
+const cleanupFiles = (filenames) => {
+  // Tentukan direktori upload Anda (ganti jika path Anda berbeda)
+  const uploadDir = path.join(__dirname, "..", "uploads"); // Sesuaikan path jika perlu
+
+  filenames.forEach((filename) => {
+    const filePath = path.join(uploadDir, filename);
+
+    // Hapus file
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        // Log error jika gagal menghapus, tapi jangan hentikan eksekusi
+        console.error(`Gagal menghapus file: ${filePath}`, err);
+      } else {
+        console.log(`File berhasil dihapus: ${filePath}`);
+      }
+    });
+  });
 };

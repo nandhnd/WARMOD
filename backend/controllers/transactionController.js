@@ -122,14 +122,29 @@ export const cartCheckout = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    if (req.user.role == "admin") {
+    if (req.user.role === "admin") {
       return res.status(403).json({
         status: "fail",
         message: "Admin tidak bisa membeli addon",
       });
     }
 
-    // Ambil isi keranjang user
+    const existing = await Transaction.findOne({
+      where: {
+        user_id: userId,
+        payment_status: "PENDING",
+      },
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Anda memiliki transaksi yang belum selesai",
+      });
+    }
+
+    // Ambil isi cart user
     const cartItems = await Cart.findAll({ where: { user_id: userId } });
     if (cartItems.length === 0) {
       return res.status(400).json({
@@ -138,123 +153,75 @@ export const cartCheckout = async (req, res) => {
       });
     }
 
-    // Ambil semua addon berdasarkan cart
+    // Ambil data addon
     const addons = await Addon.findAll({
-      where: { id: cartItems.map((item) => item.addon_id) },
+      where: { id: cartItems.map((c) => c.addon_id) },
     });
 
-    if (!addons.length)
-      return res.status(404).json({
-        status: "fail",
-        message: "Addon tidak ditemukan",
-      });
+    // Hitung total
+    const totalAmount = addons.reduce((sum, item) => sum + item.price, 0);
 
-    // Cek apakah user sudah pernah membeli addon yang sama (PENDING / PAID)
-    const existingTransactions = await Transaction.findAll({
-      where: {
-        user_id: userId,
-        payment_status: ["PENDING", "PAID"],
+    const orderId = `WM-${Date.now()}`;
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 jam
+
+    // MIDTRANS PARAMETER
+    const parameter = {
+      payment_type: "qris",
+      transaction_details: {
+        order_id: orderId,
+        gross_amount: totalAmount,
       },
-      include: [{ model: TransactionItem, as: "items" }],
+      custom_expiry: {
+        expiry_duration: 1,
+        unit: "hour",
+      },
+    };
+
+    // REQUEST MIDTRANS
+    const midtransResponse = await midtrans.charge(parameter);
+
+    // Simpan transaksi
+    const trx = await Transaction.create({
+      reference_id: orderId,
+      user_id: userId,
+      amount: totalAmount,
+      store_id: addons[0].store_id,
+      payment_method: "QRIS",
+      payment_status: "PENDING",
+      invoice_id: midtransResponse.transaction_id,
+      expiresAt: midtransResponse.expiry_time,
+      qrisImage: midtransResponse.actions[0].url,
     });
 
-    const purchasedAddonIds = new Set(
-      existingTransactions.flatMap((t) => t.items.map((item) => item.addon_id))
-    );
-
-    const newAddons = addons.filter((a) => !purchasedAddonIds.has(a.id));
-
-    if (newAddons.length === 0) {
-      return res.status(400).json({
-        status: "fail",
-        message:
-          "Semua addon di keranjang sudah pernah dibeli atau masih menunggu pembayaran.",
+    // Simpan detail transaksi
+    for (const addon of addons) {
+      await TransactionItem.create({
+        transaction_id: trx.id,
+        addon_id: addon.id,
+        price: addon.price,
       });
     }
 
-    // Kelompokkan addons berdasarkan store_id agar bisa multi-store checkout
-    const groupedByStore = newAddons.reduce((acc, addon) => {
-      if (!acc[addon.store_id]) acc[addon.store_id] = [];
-      acc[addon.store_id].push(addon);
-      return acc;
-    }, {});
-
-    const createdTransactions = [];
-
-    // Loop per store dan buat transaksi
-    for (const [storeId, storeAddons] of Object.entries(groupedByStore)) {
-      const totalAmount = storeAddons.reduce((sum, a) => sum + a.price, 0);
-      const referenceId = `trx-${Date.now()}-${storeId}`;
-
-      const transaction = await Transaction.create({
-        reference_id: referenceId,
-        user_id: userId,
-        store_id: storeId,
-        amount: totalAmount,
-        payment_method: "QRIS",
-        payment_status: "PENDING",
-      });
-
-      // Simpan item transaksi
-      for (const addon of storeAddons) {
-        await TransactionItem.create({
-          transaction_id: transaction.id,
-          addon_id: addon.id,
-          price: addon.price,
-        });
-      }
-
-      // Request ke Midtrans
-      const parameter = {
-        payment_type: "qris",
-        transaction_details: {
-          order_id: referenceId,
-          gross_amount: totalAmount,
-        },
-        customer_details: {
-          email: req.user.email,
-          first_name: req.user.username,
-        },
-        custom_expiry: {
-          expiry_duration: 1,
-          unit: "hour",
-        },
-      };
-
-      const midtransResponse = await midtrans.charge(parameter);
-
-      transaction.invoice_id = midtransResponse.transaction_id;
-      await transaction.save();
-
-      createdTransactions.push({
-        transaction,
-        midtrans_response: midtransResponse,
-      });
-
-      // Update saldo penjual (seller balance)
-      const store = await Store.findByPk(storeId);
-      if (store) {
-        store.sellerBalance = (store.sellerBalance || 0) + totalAmount;
-        await store.save();
-      }
-    }
-
-    // Hapus item dari cart
+    // Hapus cart
     await Cart.destroy({ where: { user_id: userId } });
 
-    return res.status(201).json({
+    return res.status(200).json({
       status: "success",
-      message: "Checkout berhasil, scan QR untuk membayar",
+      message: "QRIS dibuat",
       data: {
-        createdTransactions,
+        orderId,
+        totalAmount,
+        expiresAt: expiry,
+        qrisImage: midtransResponse.actions.url || null,
       },
+      midtrans_response: midtransResponse,
     });
   } catch (error) {
-    console.error("cartCheckout error:", error.ApiResponse || error.message);
+    console.error("cartCheckout Error:", error);
     return res.status(500).json({
       status: "error",
-      message: "Terjadi kesalahan pada server",
-      code: error.message,
+      message: "Server error",
+      error: error.message,
     });
   }
 };
@@ -357,6 +324,284 @@ export const midtransWebhook = async (req, res) => {
       status: "error",
       message: "Terjadi kesalahan pada server",
       code: error.message,
+    });
+  }
+};
+
+export const getLatestCheckout = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Cek transaksi terakhir user yg masih pending
+    const trx = await Transaction.findOne({
+      where: {
+        user_id: userId,
+        payment_status: "PENDING",
+      },
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!trx) {
+      return res.status(200).json({
+        status: "success",
+        message: "Tidak ada transaksi berjalan",
+      });
+    }
+
+    // Ambil detail item yang dibeli
+    const items = await TransactionItem.findAll({
+      where: { transaction_id: trx.id },
+      include: [
+        {
+          model: Addon,
+          include: [{ model: Store }],
+        },
+      ],
+    });
+
+    // Format FE butuh: title, category, seller, price
+    const formattedItems = items.map((item) => ({
+      title: item.Addon.title,
+      category: item.Addon.category,
+      seller: item.Addon.Store?.name || "Unknown Store",
+      price: item.price,
+    }));
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        orderId: trx.reference_id,
+        totalAmount: trx.amount,
+        expiresAt: trx.expiresAt,
+        qrisImage: trx.qrisImage,
+        status: trx.payment_status,
+        items: formattedItems,
+      },
+    });
+  } catch (err) {
+    console.error("getLatestCheckout Error:", err);
+    return res.status(500).json({
+      status: "error",
+      message: "Server error",
+      error: err.message,
+    });
+  }
+};
+
+export const getTransactionHistory = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const transactions = await Transaction.findAll({
+      where: { user_id: userId },
+      order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: TransactionItem,
+          include: [
+            {
+              model: Addon,
+              include: [{ model: Store }],
+            },
+          ],
+        },
+        {
+          model: User,
+          attributes: ["email"],
+        },
+      ],
+    });
+
+    const formatted = transactions.map((trx) => ({
+      orderNumber: trx.reference_id,
+      userEmail: trx.User?.email || "",
+      paymentMethod: trx.payment_method?.toLowerCase() || "",
+      status: trx.payment_status?.toLowerCase() || "",
+      timestamp: trx.createdAt,
+      items: trx.TransactionItems.map((item) => ({
+        id: item.Addon.id,
+        title: item.Addon.title,
+        category: item.Addon.game,
+        price: item.price,
+        seller: item.Addon.Store?.name || "",
+        image: item.Addon.images,
+      })),
+    }));
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        total: formatted.length,
+        transactions: formatted,
+      },
+    });
+  } catch (error) {
+    console.error("getTransactionHistory Error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+export const getSellerTransactionsHistory = async (req, res) => {
+  try {
+    const storeId = req.user.id;
+
+    const transactions = await Transaction.findAll({
+      where: { store_id: storeId },
+      order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: TransactionItem,
+          include: [
+            {
+              model: Addon,
+              include: [{ model: Store }],
+            },
+          ],
+        },
+        {
+          model: User,
+          attributes: ["username", "email"],
+        },
+      ],
+    });
+
+    let results = transactions.map((trx) => {
+      return {
+        id: trx.reference_id || "",
+        pembeli: {
+          nama: trx.User?.username || "",
+          email: trx.User?.email || "",
+        },
+        mod: {
+          nama: trx.TransactionItems[0].Addon.title || "",
+          harga: trx.TransactionItems[0].Addon.price || 0,
+          kategori: trx.TransactionItems[0].Addon.game || "",
+          gambar: trx.TransactionItems[0].Addon.images || "",
+        },
+        tanggal: trx.createdAt.toISOString() || "",
+        status: trx.payment_status || "",
+        total: trx.amount || 0,
+        metodePembayaran: trx.payment_method || "",
+      };
+    });
+
+    // console.log("Fetched transactions:", transactions[0]);
+    return res.status(200).json({
+      status: "success",
+      message: "Seller transactions fetched successfully",
+      data: results,
+    });
+  } catch (error) {
+    console.error("getSellerTransactionsHistory Error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+export const getAdminTransactionsHistory = async (req, res) => {
+  try {
+    const transactions = await Transaction.findAll({
+      order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: TransactionItem,
+          include: [
+            {
+              model: Addon,
+              include: [
+                {
+                  model: Store,
+                  include: [
+                    {
+                      model: User,
+                      as: "user",
+                      attributes: ["username", "email"], // Penjual
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          model: User, // Pembeli
+          attributes: ["username", "email"],
+        },
+      ],
+    });
+
+    let results = transactions.map((trx) => {
+      // Data Transaksi Utama
+      const transactionId = trx.reference_id || "";
+      const pembeli = {
+        nama: trx.User?.username || "Guest",
+        email: trx.User?.email || "N/A",
+      };
+
+      // Ambil data penjual dan daftar mod
+      let penjual = { nama: "Unknown Seller", email: "N/A" };
+
+      // Map TransactionItems untuk mendapatkan detail setiap Mod
+      const daftarMod = trx.TransactionItems.map((item) => {
+        const addon = item.Addon || {};
+        const storeUser = addon.Store?.user || {};
+
+        // Asumsi: Semua item dalam satu transaksi berasal dari penjual yang sama
+        // Jika tidak, Anda harus menyesuaikan struktur output FE.
+        if (storeUser.username) {
+          penjual = {
+            nama: storeUser.username,
+            email: storeUser.email,
+            toko: addon.Store.name,
+          };
+        }
+
+        return {
+          nama: addon.title || "Mod Tanpa Nama",
+          harga: item.price || addon.price || 0, // Gunakan harga item jika ada
+          kategori: addon.game || "Umum",
+          deskripsi: addon.description || "",
+        };
+      });
+
+      return {
+        // ID Transaksi Utama
+        id: transactionId,
+        transactionId: transactionId, // Menyimpan dalam format yang sama dengan mock
+
+        // Detail Pembeli & Penjual
+        pembeli: pembeli,
+        penjual: penjual, // Menggunakan penjual yang ditemukan di dalam item pertama/terakhir
+
+        // Detail Produk (Daftar Mod)
+        daftarMod: daftarMod, // Array berisi semua Mod yang dibeli
+
+        // Detail Transaksi
+        tanggal: trx.createdAt.toISOString() || "",
+        status: trx.payment_status || "PENDING",
+        totalBayar: trx.amount || 0, // Total keseluruhan didapat dari kolom 'amount' di tabel Transaction
+        metodePembayaran: trx.payment_method || "",
+      };
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Admin transactions history fetched successfully",
+      data: results, // Mengembalikan array 'results' (1 transaksi = 1 objek)
+    });
+  } catch (error) {
+    console.error("getAdminTransactionsHistory Error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Server error",
+      error: error.message,
     });
   }
 };

@@ -5,6 +5,7 @@ import Store from "../models/storeModel.js";
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.findAll({
+      where: { has_store: true },
       attributes: ["id", "email", "username", "role", "has_store", "createdAt"],
       include: [
         { model: Store, as: "store", attributes: ["id", "name", "status"] },

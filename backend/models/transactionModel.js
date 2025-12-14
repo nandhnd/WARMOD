@@ -1,7 +1,5 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
-import User from "./userModel.js";
-import Store from "./storeModel.js";
 
 const Transaction = sequelize.define(
   "Transaction",
@@ -41,15 +39,19 @@ const Transaction = sequelize.define(
       type: DataTypes.ENUM("PENDING", "PAID", "FAILED", "EXPIRED"),
       defaultValue: "PENDING",
     },
+    expiresAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    qrisImage: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
   },
   {
     tableName: "transactions",
     timestamps: true,
   }
 );
-
-// 🔗 Relasi
-Transaction.belongsTo(User, { foreignKey: "user_id" });
-Transaction.belongsTo(Store, { foreignKey: "store_id" });
 
 export default Transaction;
