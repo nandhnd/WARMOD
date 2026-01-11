@@ -6,6 +6,13 @@ import DiscountItem from "../models/discountItemModel.js";
 
 import { Op } from "sequelize";
 
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // User: buat addon baru
 export const createAddon = async (req, res) => {
   try {
@@ -99,7 +106,9 @@ export const updateMyAddon = async (req, res) => {
     });
 
     await addon.save();
-    res.status(200).json({ message: "Addon berhasil diperbarui", addon });
+    res
+      .status(200)
+      .json({ status: "success", message: "Addon berhasil diperbarui", addon });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -118,7 +127,50 @@ export const deleteMyAddon = async (req, res) => {
     if (!addon)
       return res.status(404).json({ message: "Addon tidak ditemukan" });
 
+    // Hapus file gambar jika ada
+    if (addon.images) {
+      try {
+        // Parse JSON string jika images disimpan sebagai string
+        let imagesArray = addon.images;
+        if (typeof addon.images === "string") {
+          imagesArray = JSON.parse(addon.images);
+        }
+
+        if (Array.isArray(imagesArray)) {
+          for (const imageUrl of imagesArray) {
+            if (imageUrl) {
+              // Ekstrak nama file dari URL
+              // Contoh: "http://localhost:5000/api/uploads/IMG_1768038168669_4tf4o3yemzh.jpg"
+              // Menjadi: "IMG_1768038168669_4tf4o3yemzh.jpg"
+              const fileName = imageUrl.split("/").pop();
+
+              if (fileName) {
+                const imagePath = path.join(
+                  __dirname,
+                  "..",
+                  "uploads",
+                  fileName
+                );
+
+                // Cek apakah file ada
+                if (fs.existsSync(imagePath)) {
+                  // Hapus file
+                  fs.unlinkSync(imagePath);
+                  console.log(`File ${fileName} berhasil dihapus`);
+                } else {
+                  console.log(`File ${fileName} tidak ditemukan di server`);
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error menghapus images:", error);
+      }
+    }
+
     await addon.destroy();
+
     res.status(200).json({ message: "Addon berhasil dihapus" });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -209,6 +261,7 @@ export const getApprovedAddons = async (req, res) => {
         id: addon.id,
         title: addon.title,
         category: addon.game,
+        id_store: addon.Store?.id || null,
         seller: addon.Store?.name || null,
         price: finalPrice, // harga setelah diskon
         originalPrice: addon.price, // harga asli
